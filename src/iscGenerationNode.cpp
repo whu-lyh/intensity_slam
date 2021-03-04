@@ -34,7 +34,6 @@
 ros::Publisher isc_pub;
 ros::Publisher loop_info_pub;
 
-
 std::queue<sensor_msgs::PointCloud2ConstPtr> pointCloudBuf;
 std::queue<nav_msgs::Odometry::ConstPtr> odometryBuf;
 std::mutex mutex_lock;
@@ -62,6 +61,7 @@ void pointCloudCallback(const sensor_msgs::PointCloud2ConstPtr &msg)
 
 void loop_closure_detection(){
     while(1){
+        // check only odometry and total point cloud queue is not empty
         if(!pointCloudBuf.empty() && !odometryBuf.empty()){
             //align time stamp
             mutex_lock.lock();
@@ -83,12 +83,15 @@ void loop_closure_detection(){
             pcl::fromROSMsg(*pointCloudBuf.front(), *pointcloud_in);
             ros::Time pointcloud_time = (pointCloudBuf.front())->header.stamp;
             Eigen::Isometry3d odom_in = Eigen::Isometry3d::Identity();
-            odom_in.rotate(Eigen::Quaterniond(odometryBuf.front()->pose.pose.orientation.w,odometryBuf.front()->pose.pose.orientation.x,odometryBuf.front()->pose.pose.orientation.y,odometryBuf.front()->pose.pose.orientation.z));  
-            odom_in.pretranslate(Eigen::Vector3d(odometryBuf.front()->pose.pose.position.x,odometryBuf.front()->pose.pose.position.y,odometryBuf.front()->pose.pose.position.z));
+            // rotation coupled deeply with ROS
+            odom_in.rotate(Eigen::Quaterniond(odometryBuf.front()->pose.pose.orientation.w,odometryBuf.front()->pose.pose.orientation.x,
+                                                odometryBuf.front()->pose.pose.orientation.y,odometryBuf.front()->pose.pose.orientation.z));  
+            // translation
+            odom_in.pretranslate(Eigen::Vector3d(odometryBuf.front()->pose.pose.position.x,odometryBuf.front()->pose.pose.position.y,
+                                                odometryBuf.front()->pose.pose.position.z));
             odometryBuf.pop();
             pointCloudBuf.pop();  
             mutex_lock.unlock();
-
 
             iscGeneration.loopDetection(pointcloud_in, odom_in);
 
@@ -115,13 +118,9 @@ void loop_closure_detection(){
     }//end of while(1)
 }
 
-
-
 int main(int argc, char **argv)
 {
-
     ros::init(argc, argv, "isc_gen");
-
     ros::NodeHandle nh("~");
 
     //rosnode init
@@ -131,14 +130,16 @@ int main(int argc, char **argv)
     loop_info_pub = nh.advertise<intensity_slam::LoopInfo>("/loop_closure", 100);
     isc_pub = nh.advertise<sensor_msgs::Image>("/isc", 100);
 
-
     //read parameter
+    // total sector number and total ring number, useless here maybe
     int sector_width =60;
     int ring_height = 60;
     double max_dis= 40.0;
 
+    // can't find in launch file??
     nh.getParam("/sector_width", sector_width); 
     nh.getParam("/ring_height", ring_height); 
+    // from launch file by default is 90m
     nh.getParam("/max_dis", max_dis); 
     nh.getParam("/scan_period", scan_period);  
 

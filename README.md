@@ -1,7 +1,7 @@
-# Intensity-SLAM 
+# Intensity-SLAM Noted
 ## Intensity-Assisted Simultaneous Localization And Mapping
 
-This is an implementation of paper "Intensity-SLAM: Intensity Assisted Localization and Mapping for Large Scale Environment"
+This is an noted implementation of paper "Intensity-SLAM: Intensity Assisted Localization and Mapping for Large Scale Environment"
 [Wang Han](http://wanghan.pro), Nanyang Technological University, Singapore
 
 ## 1. Prerequisites
@@ -27,7 +27,7 @@ Alternatively, you may remove the hector trajectory server node if trajectory vi
 ### 2.1 Clone repository:
 ```
     cd ~/catkin_ws/src
-    git clone https://github.com/wh200720041/intensity_slam.git
+    git clone https://github.com/whu-lyh/intensity_slam.git
     cd ..
     catkin_make
     source ~/catkin_ws/devel/setup.bash
@@ -51,10 +51,23 @@ And this may take a few minutes to unzip the file
     roslaunch intensity_slam intensity_slam.launch
 ```
 
-## 4.Acknowledgements
+## 4.CodeReading
+- the whole slam system is deeply related to the hardware which makes the point cloud preprocess more fancy.
+- the intensity calibration module is just indicent angle normalization shown in code but more fancy in paper. Maybe here the calibration is related to the VELODYNE LASER scanner.
+- the featureExtraction module is slightly different from the origin LOAM, maybe more closed to A-LOAM. without feature distribution check but more straightforward and easy to understand, more friendly to fresher.
+- iscloam is more close to the loam
+- update frame to map points the downsampling is done. The down sampling points are used in residual calculation,using ceres to finish a local PGO.
+- normal calculation is still based on the matrix decomposition and trilinear interplation is more simplidfied in code level
+- different residual blocks shared the equal weights
+- transformation should be normalized, more theory support
+- 
+
+
+
+## 5.Acknowledgements
 Thanks for [A-LOAM](https://github.com/HKUST-Aerial-Robotics/A-LOAM) and LOAM(J. Zhang and S. Singh. LOAM: Lidar Odometry and Mapping in Real-time) and [LOAM_NOTED](https://github.com/cuitaixiang/LOAM_NOTED).
 
-## 5. Citation
+## 6. Citation
 If you use this work for your research, you may want to cite
 ```
 @article{wang2021intensity,

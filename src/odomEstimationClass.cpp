@@ -35,11 +35,11 @@ void OdomEstimationClass::initMapWithPoints(const pcl::PointCloud<pcl::PointXYZI
     optimization_count=12;
 }
 
-
 void OdomEstimationClass::updatePointsToMap(const pcl::PointCloud<pcl::PointXYZI>::Ptr& edge_in, const pcl::PointCloud<pcl::PointXYZI>::Ptr& surf_in){
 
     if(optimization_count>4)
         optimization_count--;
+    // ?
     Eigen::Isometry3d odom_prediction = odom * last_odom.inverse() * odom;
 
     last_odom = odom;
@@ -56,6 +56,7 @@ void OdomEstimationClass::updatePointsToMap(const pcl::PointCloud<pcl::PointXYZI
     downSamplingToMap(edge_in,downsampledEdgeCloud,surf_in,downsampledSurfCloud, downsampledDisCloud);
 
     if(laserCloudCornerMap->points.size()>10 && laserCloudSurfMap->points.size()>50){
+        // local map points
         kdtreeEdgeMap->setInputCloud(laserCloudCornerMap);
         kdtreeSurfMap->setInputCloud(laserCloudSurfMap);
         kdtreeDisMap->setInputCloud(laserCloudDisMap);
@@ -80,7 +81,6 @@ void OdomEstimationClass::updatePointsToMap(const pcl::PointCloud<pcl::PointXYZI
             ceres::Solver::Summary summary;
 
             ceres::Solve(options, &problem, &summary);
-
         }
     }else{
         printf("not enough points in map to associate, map error");
@@ -97,6 +97,7 @@ void OdomEstimationClass::normalizeIsometry(Eigen::Isometry3d& trans){
     q_temp.normalize();
     trans.linear() = q_temp.toRotationMatrix();
 }
+
 void OdomEstimationClass::pointAssociateToMap(pcl::PointXYZI const *const pi, pcl::PointXYZI *const po)
 {
     Eigen::Vector3d point_curr(pi->x, pi->y, pi->z);
@@ -107,7 +108,9 @@ void OdomEstimationClass::pointAssociateToMap(pcl::PointXYZI const *const pi, pc
     po->intensity = pi->intensity;
 }
 
-void OdomEstimationClass::addEdgeCostFactor(const pcl::PointCloud<pcl::PointXYZI>::Ptr& pc_in, const pcl::PointCloud<pcl::PointXYZI>::Ptr& map_in, ceres::Problem& problem, ceres::LossFunction *loss_function){
+void OdomEstimationClass::addEdgeCostFactor(const pcl::PointCloud<pcl::PointXYZI>::Ptr& pc_in, 
+                                            const pcl::PointCloud<pcl::PointXYZI>::Ptr& map_in, 
+                                            ceres::Problem& problem, ceres::LossFunction *loss_function){
     int corner_num=0;
     for (int i = 0; i < (int)pc_in->points.size(); i++)
     {
@@ -161,7 +164,9 @@ void OdomEstimationClass::addEdgeCostFactor(const pcl::PointCloud<pcl::PointXYZI
 
 }
 
-void OdomEstimationClass::addSurfCostFactor(const pcl::PointCloud<pcl::PointXYZI>::Ptr& pc_in, const pcl::PointCloud<pcl::PointXYZI>::Ptr& map_in, ceres::Problem& problem, ceres::LossFunction *loss_function){
+void OdomEstimationClass::addSurfCostFactor(const pcl::PointCloud<pcl::PointXYZI>::Ptr& pc_in, 
+                                            const pcl::PointCloud<pcl::PointXYZI>::Ptr& map_in, 
+                                            ceres::Problem& problem, ceres::LossFunction *loss_function){
     int surf_num=0;
     for (int i = 0; i < (int)pc_in->points.size(); i++)
     {
@@ -214,14 +219,14 @@ void OdomEstimationClass::addSurfCostFactor(const pcl::PointCloud<pcl::PointXYZI
     if(surf_num<20){
         printf("not enough correct points");
     }
-
 }
 
-void OdomEstimationClass::addIntensityCostFactor(const pcl::PointCloud<pcl::PointXYZI>::Ptr& pc_in, const pcl::PointCloud<pcl::PointXYZI>::Ptr& map_in, ceres::Problem& problem, ceres::LossFunction *loss_function){
+void OdomEstimationClass::addIntensityCostFactor(const pcl::PointCloud<pcl::PointXYZI>::Ptr& pc_in, 
+                                                const pcl::PointCloud<pcl::PointXYZI>::Ptr& map_in, 
+                                                ceres::Problem& problem, ceres::LossFunction *loss_function){
     int dis_num=0;
     for (int i = 0; i < (int)pc_in->points.size(); i++)
     {
-
         // if(pc_in->points[i].intensity<0.1)
         //     continue;
         pcl::PointXYZI point_temp;
@@ -235,13 +240,14 @@ void OdomEstimationClass::addIntensityCostFactor(const pcl::PointCloud<pcl::Poin
         else if(pointSearchSqDis[0]<1.0){
             
             float intensity_derivative[8]={0,0,0,0,0,0,0,0};
+            // intensity derivative?
             calculateDerivative(map_in->points[i],pointSearchInd,map_in,intensity_derivative);
             Eigen::Vector3d curr_point(pc_in->points[i].x, pc_in->points[i].y, pc_in->points[i].z);
             Eigen::Vector3d nearest_point(map_in->points[pointSearchInd[0]].x,map_in->points[pointSearchInd[0]].y,map_in->points[pointSearchInd[0]].z);
-            ceres::CostFunction *cost_function = new IntensityAnalyticCostFunction(curr_point, nearest_point, pc_in->points[i].intensity - map_in->points[pointSearchInd[0]].intensity, intensity_derivative, 1.0);  
+            ceres::CostFunction *cost_function = new IntensityAnalyticCostFunction(curr_point, nearest_point, pc_in->points[i].intensity - 
+                                                                            map_in->points[pointSearchInd[0]].intensity, intensity_derivative, 1.0);  
             problem.AddResidualBlock(cost_function, loss_function, parameters);
-            dis_num++;
-                     
+            dis_num++;                  
         }
     }
     if(dis_num<10){
@@ -249,6 +255,7 @@ void OdomEstimationClass::addIntensityCostFactor(const pcl::PointCloud<pcl::Poin
     }
 
 }
+
 void OdomEstimationClass::calculateDerivative(pcl::PointXYZI& point_in, std::vector<int>& pointSearchInd, const pcl::PointCloud<pcl::PointXYZI>::Ptr& map_in, float intensity_derivative[]){
 
     //calculate average 
@@ -287,11 +294,16 @@ void OdomEstimationClass::calculateDerivative(pcl::PointXYZI& point_in, std::vec
     }
     
 }
-void OdomEstimationClass::downSamplingToMap(const pcl::PointCloud<pcl::PointXYZI>::Ptr& edge_pc_in, pcl::PointCloud<pcl::PointXYZI>::Ptr& edge_pc_out, const pcl::PointCloud<pcl::PointXYZI>::Ptr& surf_pc_in, pcl::PointCloud<pcl::PointXYZI>::Ptr& surf_pc_out, pcl::PointCloud<pcl::PointXYZI>::Ptr& dis_pc_out){
+
+void OdomEstimationClass::downSamplingToMap(const pcl::PointCloud<pcl::PointXYZI>::Ptr& edge_pc_in, pcl::PointCloud<pcl::PointXYZI>::Ptr& edge_pc_out, 
+                                            const pcl::PointCloud<pcl::PointXYZI>::Ptr& surf_pc_in, pcl::PointCloud<pcl::PointXYZI>::Ptr& surf_pc_out, 
+                                            pcl::PointCloud<pcl::PointXYZI>::Ptr& dis_pc_out){
     downSizeFilterEdge.setInputCloud(edge_pc_in);
     downSizeFilterEdge.filter(*edge_pc_out);
     downSizeFilterSurf.setInputCloud(surf_pc_in);
     downSizeFilterSurf.filter(*surf_pc_out); 
+
+    // intensity filter and merge edge and surf edge into one pointer container
     pcl::PointCloud<pcl::PointXYZI>::Ptr tmpDis(new pcl::PointCloud<pcl::PointXYZI>());
 
     for(int i=0;i<edge_pc_in->points.size();i++){
@@ -306,6 +318,7 @@ void OdomEstimationClass::downSamplingToMap(const pcl::PointCloud<pcl::PointXYZI
     downSizeFilterDis.filter(*dis_pc_out);    
     
 }
+
 void OdomEstimationClass::addPointsToMap(const pcl::PointCloud<pcl::PointXYZI>::Ptr& downsampledEdgeCloud, const pcl::PointCloud<pcl::PointXYZI>::Ptr& downsampledSurfCloud){
     for (int i = 0; i < (int)downsampledEdgeCloud->points.size(); i++)
     {
@@ -353,8 +366,6 @@ void OdomEstimationClass::addPointsToMap(const pcl::PointCloud<pcl::PointXYZI>::
     downSizeFilterSurf.filter(*laserCloudCornerMap);
     downSizeFilterDis.setInputCloud(tmpDis);
     downSizeFilterDis.filter(*laserCloudDisMap);
-
-
 }
 
 pcl::PointCloud<pcl::PointXYZI>::Ptr OdomEstimationClass::getMap(void){

@@ -12,7 +12,6 @@
 #include <numeric>
 #include <cmath>
 
-
 //PCL
 #include <pcl_ros/point_cloud.h>
 #include <pcl/point_types.h>
@@ -37,7 +36,6 @@
 #include <Eigen/Core>
 #include <Eigen/Geometry>
 
-
 //IF TRAVELLED DISTANCE IS LESS THAN THIS VALUE, SKIP FOR PLACE RECOGNTION
 #define SKIP_NEIBOUR_DISTANCE 20.0
 //how much error will odom generate per frame 
@@ -48,7 +46,6 @@
 #define INTENSITY_THRESHOLD 0.92
 
 typedef cv::Mat ISCDescriptor; 
-
 
 class ISCGenerationClass
 {
@@ -63,6 +60,7 @@ class ISCGenerationClass
         int current_frame_id;
         std::vector<int> matched_frame_id;
     private:
+        // the intensity signature size is 90*20, initialized in this class
         int rings = 20;
         int sectors = 90;
         double ring_step=0.0;
@@ -70,26 +68,30 @@ class ISCGenerationClass
         double max_dis = 60; 
 
         std::vector<cv::Vec3b> color_projection;
-
-        
+   
         pcl::PointCloud<pcl::PointXYZI>::Ptr current_point_cloud;
         pcl::PointCloud<pcl::PointXYZI>::Ptr test_pc;
 
+        // vector to store all poses
         std::vector<Eigen::Vector3d> pos_arr;
+        // vector to store the total distance
         std::vector<double> travel_distance_arr;
+        // vector to store the ISC descriptors
         std::vector<ISCDescriptor> isc_arr;
 
         void init_color(void);
         void print_param(void);
+        // inside call calculate_geometry_dis() firstly, then call calculate_intensity_dis()
         bool is_loop_pair(ISCDescriptor& desc1, ISCDescriptor& desc2, double& geo_score, double& inten_score);
+        // in loop closure stage, after ground point filtered, calculate isc feature at first then call is_loop_pair to check loop match result
         ISCDescriptor calculate_isc(const pcl::PointCloud<pcl::PointXYZI>::Ptr filtered_pointcloud);
+        // return geomoery similarity
         double calculate_geometry_dis(const ISCDescriptor& desc1, const ISCDescriptor& desc2, int& angle);
+        // return intensity similarity
         double calculate_intensity_dis(const ISCDescriptor& desc1, const ISCDescriptor& desc2, int& angle);
+        // as shown in paper, ground point cloud are filtered out before calculate ISC
         void ground_filter(const pcl::PointCloud<pcl::PointXYZI>::Ptr& pc_in, pcl::PointCloud<pcl::PointXYZI>::Ptr& pc_out);
 };
-
-
-
 
 #endif // _ISC_GENERATION_CLASS_H_
 

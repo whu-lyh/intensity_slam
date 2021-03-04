@@ -41,7 +41,8 @@ class SurfNormAnalyticCostFunction : public ceres::SizedCostFunction<1, 7> {
 
 class IntensityAnalyticCostFunction : public ceres::SizedCostFunction<1, 7> {
 	public:
-		IntensityAnalyticCostFunction(Eigen::Vector3d curr_point_, Eigen::Vector3d nearest_point_, float intensity_residual_, float intensity_derivative_[],  float weight);
+		IntensityAnalyticCostFunction(Eigen::Vector3d curr_point_, Eigen::Vector3d nearest_point_, 
+		float intensity_residual_, float intensity_derivative_[],  float weight);
 		virtual ~IntensityAnalyticCostFunction() {}
 		virtual bool Evaluate(double const *const *parameters, double *residuals, double **jacobians) const;
 	
@@ -54,9 +55,10 @@ class IntensityAnalyticCostFunction : public ceres::SizedCostFunction<1, 7> {
 
 struct IntensityAutoDiffCostFunction
 {
-
-	IntensityAutoDiffCostFunction(Eigen::Vector3d curr_point_, Eigen::Vector3d nearest_point_, float target_intensity_, float intensity_derivative_[]) 
-                                                        : curr_point(curr_point_),nearest_point(nearest_point_),target_intensity(target_intensity_){
+	IntensityAutoDiffCostFunction(Eigen::Vector3d curr_point_, 
+	Eigen::Vector3d nearest_point_, float target_intensity_, float intensity_derivative_[]) 
+    : curr_point(curr_point_),nearest_point(nearest_point_),target_intensity(target_intensity_)
+	{
 	    for(int i=0;i<8;i++){
 	        intensity_derivative[i] = intensity_derivative_[i];
 	    }

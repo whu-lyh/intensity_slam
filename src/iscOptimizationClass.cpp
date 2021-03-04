@@ -27,7 +27,9 @@ void ISCOptimizationClass::init(void){
     downSizeFilter.setLeafSize(0.4, 0.4, 0.4);
 }
 
-bool ISCOptimizationClass::addPoseToGraph(const pcl::PointCloud<pcl::PointXYZI>::Ptr& pointcloud_edge_in, const pcl::PointCloud<pcl::PointXYZI>::Ptr& pointcloud_surf_in, std::vector<int>& matched_frame_id, Eigen::Isometry3d& odom_in){
+bool ISCOptimizationClass::addPoseToGraph(const pcl::PointCloud<pcl::PointXYZI>::Ptr& pointcloud_edge_in, 
+                                        const pcl::PointCloud<pcl::PointXYZI>::Ptr& pointcloud_surf_in, 
+                                        std::vector<int>& matched_frame_id, Eigen::Isometry3d& odom_in){
 
     //pointcloud_arr.push_back(pointcloud_in);
     pointcloud_surf_arr.push_back(pointcloud_surf_in);
@@ -63,7 +65,7 @@ bool ISCOptimizationClass::addPoseToGraph(const pcl::PointCloud<pcl::PointXYZI>:
 			//ROS_WARN("pose %f,%f,%f, [%f,%f,%f,%f]",transform_pose3.translation().x(),transform_pose3.translation().y(),transform_pose3.translation().z(),transform_pose3.rotation().toQuaternion().w(),transform_pose3.rotation().toQuaternion().x(),transform_pose3.rotation().toQuaternion().y(),transform_pose3.rotation().toQuaternion().z());
             Eigen::Isometry3d transform = pose3ToEigen(pose_optimized_arr[matched_frame_id[i]].between(pose_optimized_arr.back()));
 			if(geometryConsistencyVerification(pointcloud_edge_arr.size()-1, matched_frame_id[i], transform)){
-
+                // if geometry consistency is satisfied, fecth the loop transform and conduct a factor graph optimization
                 gtsam::Pose3 loop_temp = eigenToPose3(transform);
                 graph.push_back(gtsam::BetweenFactor<gtsam::Pose3>(gtsam::Symbol('x', matched_frame_id[i]+1), gtsam::Symbol('x', pointcloud_edge_arr.size()), loop_temp, loopModel));
                 gtsam::Values result = gtsam::LevenbergMarquardtOptimizer(graph, initials).optimize();
@@ -146,13 +148,14 @@ bool ISCOptimizationClass::updateStates(gtsam::Values& result, int matched_id, i
 
 }
 bool ISCOptimizationClass::geometryConsistencyVerification(int current_id, int matched_id, Eigen::Isometry3d& transform){
-
+    // transform to obtain local map points (matched pc)
     pcl::PointCloud<pcl::PointXYZI>::Ptr map_surf(new pcl::PointCloud<pcl::PointXYZI>()); 
     pcl::PointCloud<pcl::PointXYZI>::Ptr map_edge(new pcl::PointCloud<pcl::PointXYZI>()); 
     for(int i = -20; i <=20; i=i+5){
         if(matched_id+i>= current_id || matched_id+i<0)
             continue;
 
+        // obtain Eigen Isometry matrix and transform the point
         Eigen::Isometry3d transform_pose = pose3ToEigen(pose_optimized_arr[matched_id+i]);
         pcl::PointCloud<pcl::PointXYZI>::Ptr transformed_temp(new pcl::PointCloud<pcl::PointXYZI>());
         pcl::transformPointCloud(*pointcloud_surf_arr[matched_id+i], *transformed_temp, transform_pose.cast<float>());
@@ -168,6 +171,7 @@ bool ISCOptimizationClass::geometryConsistencyVerification(int current_id, int m
     downSizeFilter.setInputCloud(map_surf);
     downSizeFilter.filter(*map_surf);
 
+    // current multi scan frame (loop detected pc)
     pcl::PointCloud<pcl::PointXYZI>::Ptr current_scan_surf(new pcl::PointCloud<pcl::PointXYZI>()); 
     pcl::PointCloud<pcl::PointXYZI>::Ptr current_scan_edge(new pcl::PointCloud<pcl::PointXYZI>()); 
     for(int i = 0; i <=0; i=i+3){
@@ -194,10 +198,13 @@ bool ISCOptimizationClass::geometryConsistencyVerification(int current_id, int m
     pcl::PointCloud<pcl::PointXYZI>::Ptr cloud_temp(new pcl::PointCloud<pcl::PointXYZI>()); 
     pcl::transformPointCloud(*current_scan_surf, *loop_candidate_pc, transform_pose.cast<float>());
     pcl::transformPointCloud(*current_scan_edge, *cloud_temp, transform_pose.cast<float>());
+    // loop_candidate_pc contains edge and surf points with z axis offset(10)
     *loop_candidate_pc+=*cloud_temp;
     loop_map_pc = map_surf;
+    // merge map points' edge and surf points
     *loop_map_pc += *map_edge;
 
+    // above all is get candidate feature points and visualization pts
     double match_score = estimateOdom(map_edge,map_surf,current_scan_edge,current_scan_surf,transform);
     //ROS_WARN("matched score %f",match_score);
     if(match_score < LOOPCLOSURE_THRESHOLD)
@@ -218,7 +225,9 @@ Eigen::Isometry3d ISCOptimizationClass::getPose(int frame_num){
     return pose3ToEigen(pose_optimized_arr[frame_num]);
 }
 
-double ISCOptimizationClass::estimateOdom(const pcl::PointCloud<pcl::PointXYZI>::Ptr& pc_source_edge, const pcl::PointCloud<pcl::PointXYZI>::Ptr& pc_source_surf, const pcl::PointCloud<pcl::PointXYZI>::Ptr& pc_target_edge, const pcl::PointCloud<pcl::PointXYZI>::Ptr& pc_target_surf, Eigen::Isometry3d& transform){
+double ISCOptimizationClass::estimateOdom(const pcl::PointCloud<pcl::PointXYZI>::Ptr& pc_source_edge, const pcl::PointCloud<pcl::PointXYZI>::Ptr& pc_source_surf, 
+                                          const pcl::PointCloud<pcl::PointXYZI>::Ptr& pc_target_edge, const pcl::PointCloud<pcl::PointXYZI>::Ptr& pc_target_surf, 
+                                          Eigen::Isometry3d& transform){
     Eigen::Quaterniond init_q(transform.rotation());
     Eigen::Vector3d init_t(0,0,0);
     double parameters[7] = {init_q.x(), init_q.y(), init_q.z(), init_q.w(),init_t.x(), init_t.y(), init_t.z()};
@@ -284,6 +293,7 @@ double ISCOptimizationClass::estimateOdom(const pcl::PointCloud<pcl::PointXYZI>:
                     point_a = 0.1 * unit_direction + point_on_line;
                     point_b = -0.1 * unit_direction + point_on_line;
 
+                    // edge point is set in virtual?
                     ceres::CostFunction *cost_function = new EdgeAnalyticCostFunction(curr_point, point_a, point_b,1);  
                     problem.AddResidualBlock(cost_function, loss_function, parameters);
                     corner_num++;   
@@ -304,13 +314,14 @@ double ISCOptimizationClass::estimateOdom(const pcl::PointCloud<pcl::PointXYZI>:
         {
             std::vector<int> pointSearchInd;
             std::vector<float> pointSearchSqDis;
+            // kdtree is build based on the pc_source_surf 
             kdtreeSurf->nearestKSearch(tranformed_surf->points[i], 5, pointSearchInd, pointSearchSqDis);
             Eigen::Matrix<double, 5, 3> matA0;
             Eigen::Matrix<double, 5, 1> matB0 = -1 * Eigen::Matrix<double, 5, 1>::Ones();
             if (pointSearchSqDis[4] < 2.0)
             {
                 for (int j = 0; j < 5; j++)
-                {
+                {// searched pts
                     matA0(j, 0) = pc_source_surf->points[pointSearchInd[j]].x;
                     matA0(j, 1) = pc_source_surf->points[pointSearchInd[j]].y;
                     matA0(j, 2) = pc_source_surf->points[pointSearchInd[j]].z;
@@ -322,8 +333,7 @@ double ISCOptimizationClass::estimateOdom(const pcl::PointCloud<pcl::PointXYZI>:
                 bool planeValid = true;
                 
                 for (int j = 0; j < 5; j++)
-                {
-                    
+                {                 
                     if (fabs(norm(0) * pc_source_surf->points[pointSearchInd[j]].x +
                              norm(1) * pc_source_surf->points[pointSearchInd[j]].y +
                              norm(2) * pc_source_surf->points[pointSearchInd[j]].z + negative_OA_dot_norm) > 0.2)

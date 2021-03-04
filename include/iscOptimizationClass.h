@@ -86,8 +86,9 @@ class ISCOptimizationClass
 
         pcl::VoxelGrid<pcl::PointXYZI> downSizeFilter;
         
+        // convert a gtsam pose to Eigen Isometry3d transform matrix
         Eigen::Isometry3d pose3ToEigen(const gtsam::Pose3& pose3);
-
+        // convert a Eigen Isometry3d transform matrix to gtsam pose
         gtsam::Pose3 eigenToPose3(const Eigen::Isometry3d& pose_eigen);
 
         void globalOptimization(void);

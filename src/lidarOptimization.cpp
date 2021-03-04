@@ -4,21 +4,24 @@
 
 #include "lidarOptimization.h"
 
-EdgeAnalyticCostFunction::EdgeAnalyticCostFunction(Eigen::Vector3d curr_point_, Eigen::Vector3d last_point_a_, Eigen::Vector3d last_point_b_, double weight_)
-        : curr_point(curr_point_), last_point_a(last_point_a_), last_point_b(last_point_b_), weight(weight_){
-
+EdgeAnalyticCostFunction::EdgeAnalyticCostFunction(Eigen::Vector3d curr_point_, Eigen::Vector3d last_point_a_, 
+Eigen::Vector3d last_point_b_, double weight_)
+: curr_point(curr_point_), last_point_a(last_point_a_), last_point_b(last_point_b_), weight(weight_)
+{
 }
 
+// edge points' analytical cost function
 bool EdgeAnalyticCostFunction::Evaluate(double const *const *parameters, double *residuals, double **jacobians) const
 {
-    
     Eigen::Map<const Eigen::Quaterniond> q_last_curr(parameters[0]);
     Eigen::Map<const Eigen::Vector3d> t_last_curr(parameters[0] + 4);
     Eigen::Vector3d lp;
     lp = q_last_curr * curr_point + t_last_curr; //new point
+    // point to edge residual error formula
     Eigen::Vector3d nu = (lp - last_point_a).cross(lp - last_point_b);
     Eigen::Vector3d de = last_point_a - last_point_b;
 
+    // residual in three direction
     residuals[0] = weight * nu.x() / de.norm();
     residuals[1] = weight * nu.y() / de.norm();
     residuals[2] = weight * nu.z() / de.norm();
@@ -36,17 +39,13 @@ bool EdgeAnalyticCostFunction::Evaluate(double const *const *parameters, double 
             Eigen::Vector3d re = last_point_b - last_point_a;
             Eigen::Matrix3d skew_re = skew(re);
 
-            J_se3.block<3,6>(0,0) = weight * skew_re * dp_by_so3/de.norm();
-      
+            J_se3.block<3,6>(0,0) = weight * skew_re * dp_by_so3/de.norm();     
         }
     }
-
     return true;
- 
 }   
 
 //surf norm cost
-
 SurfNormAnalyticCostFunction::SurfNormAnalyticCostFunction(Eigen::Vector3d curr_point_, Eigen::Vector3d plane_unit_norm_, double negative_OA_dot_norm_, double weight_) 
                                                         : curr_point(curr_point_), plane_unit_norm(plane_unit_norm_), negative_OA_dot_norm(negative_OA_dot_norm_), weight(weight_){
 
@@ -71,17 +70,17 @@ bool SurfNormAnalyticCostFunction::Evaluate(double const *const *parameters, dou
             (dp_by_so3.block<3,3>(0, 3)).setIdentity();
             Eigen::Map<Eigen::Matrix<double, 1, 7, Eigen::RowMajor> > J_se3(jacobians[0]);
             J_se3.setZero();
-            J_se3.block<1,6>(0,0) = weight * plane_unit_norm.transpose() * dp_by_so3;
-   
+            J_se3.block<1,6>(0,0) = weight * plane_unit_norm.transpose() * dp_by_so3;  
         }
     }
     return true;
-
 }   
 
 //intensity cost
-IntensityAnalyticCostFunction::IntensityAnalyticCostFunction(Eigen::Vector3d curr_point_, Eigen::Vector3d nearest_point_, float intensity_residual_, float intensity_derivative_[], float weight_) 
-                                                        : curr_point(curr_point_),nearest_point(nearest_point_),intensity_residual(intensity_residual_),weight(weight_){
+// cost function is not the loss function, in whole ceres, loss function is embedded by a huber loss
+IntensityAnalyticCostFunction::IntensityAnalyticCostFunction(Eigen::Vector3d curr_point_, Eigen::Vector3d nearest_point_, 
+                    float intensity_residual_, float intensity_derivative_[], float weight_) 
+                    : curr_point(curr_point_),nearest_point(nearest_point_),intensity_residual(intensity_residual_),weight(weight_){
     for(int i=0;i<8;i++){
         intensity_derivative[i] = intensity_derivative_[i];
     }
@@ -98,6 +97,7 @@ bool IntensityAnalyticCostFunction::Evaluate(double const *const *parameters, do
     double delta_x = point_w.x()-nearest_point.x();
     double delta_y = point_w.y()-nearest_point.y();
     double delta_z = point_w.z()-nearest_point.z();
+    // 2mm?
     double xy_radius_square = std::max(delta_x*delta_x+delta_y*delta_y,0.0000004);
     double xy_radius = std::sqrt(xy_radius_square);
     double xyz_radius_square = std::max(xy_radius_square + delta_z*delta_z,0.0000004);
@@ -182,9 +182,7 @@ bool IntensityAnalyticCostFunction::Evaluate(double const *const *parameters, do
         }
     }
     return true;
-
 } 
-
 
 bool PoseSE3Parameterization::Plus(const double *x, const double *delta, double *x_plus_delta) const
 {

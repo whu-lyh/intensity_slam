@@ -10,10 +10,13 @@ ISCGenerationClass::ISCGenerationClass()
 }
 
 void ISCGenerationClass::init_param(int rings_in, int sectors_in, double max_dis_in){
-    rings = rings_in;
-    sectors = sectors_in;
+    rings = rings_in;// 20
+    sectors = sectors_in;// 90
+    // bydefaut 90
     max_dis = max_dis_in;
+    // ring radius difference:60/20=3m or 90/60=1.5m
     ring_step = max_dis/rings;
+    // sector angle:360/90=4 degree(as rad metric)
     sector_step = 2*M_PI/sectors;
     print_param();
     init_color();
@@ -60,10 +63,16 @@ ISCDescriptor ISCGenerationClass::calculate_isc(const pcl::PointCloud<pcl::Point
 
     for(int i=0;i<(int)filtered_pointcloud->points.size();i++){
         ROS_WARN_ONCE("intensity is %f, if intensity showed here is integer format between 1-255, please uncomment #define INTEGER_INTENSITY in iscGenerationClass.cpp and recompile", (double) filtered_pointcloud->points[i].intensity);
-        double distance = std::sqrt(filtered_pointcloud->points[i].x * filtered_pointcloud->points[i].x + filtered_pointcloud->points[i].y * filtered_pointcloud->points[i].y);
+        double distance = std::sqrt(filtered_pointcloud->points[i].x * filtered_pointcloud->points[i].x + 
+        filtered_pointcloud->points[i].y * filtered_pointcloud->points[i].y);
+        // distance from center of laser scanner in XOY plane
+        // skip if too far
         if(distance>=max_dis)
             continue;
+
         double angle = M_PI + std::atan2(filtered_pointcloud->points[i].y,filtered_pointcloud->points[i].x);
+        
+        // intensity signature size is 1.5m*6 or 3m*4 rad
         int ring_id = std::floor(distance/ring_step);
         int sector_id = std::floor(angle/sector_step);
         if(ring_id>=rings)
@@ -77,13 +86,9 @@ ISCDescriptor ISCGenerationClass::calculate_isc(const pcl::PointCloud<pcl::Point
 #endif
         if(isc.at<unsigned char>(ring_id,sector_id)<intensity_temp)
             isc.at<unsigned char>(ring_id,sector_id)=intensity_temp;
-
     }
-
     return isc;
-
 }
-
 
 ISCDescriptor ISCGenerationClass::getLastISCMONO(void){
     return isc_arr.back();
@@ -96,17 +101,18 @@ ISCDescriptor ISCGenerationClass::getLastISCRGB(void){
     for (int i = 0;i < isc_arr.back().rows;i++) {
         for (int j = 0;j < isc_arr.back().cols;j++) {
             isc_color.at<cv::Vec3b>(i, j) = color_projection[isc_arr.back().at<unsigned char>(i,j)];
-
         }
     }
     return isc_color;
 }
 
 void ISCGenerationClass::loopDetection(const pcl::PointCloud<pcl::PointXYZI>::Ptr& current_pc, Eigen::Isometry3d& odom){
-
     pcl::PointCloud<pcl::PointXYZI>::Ptr pc_filtered(new pcl::PointCloud<pcl::PointXYZI>());
+    // filter ground point first before calculate isc
     ground_filter(current_pc, pc_filtered);
+    // isc signature stored in a cv::Mat size is 90*20 or 60*60
     ISCDescriptor desc = calculate_isc(pc_filtered);
+    // odom is time-associated with current_pc
     Eigen::Vector3d current_t = odom.translation();
     //dont change push_back sequence
     if(travel_distance_arr.size()==0){
@@ -123,34 +129,40 @@ void ISCGenerationClass::loopDetection(const pcl::PointCloud<pcl::PointXYZI>::Pt
     //search for the near neibourgh pos
     int best_matched_id=0;
     double best_score=0.0;
+    // search the whole preious point frames
     for(int i = 0; i< (int)pos_arr.size(); i++){
         double delta_travel_distance = travel_distance_arr.back()- travel_distance_arr[i];
         double pos_distance = std::sqrt((pos_arr[i]-pos_arr.back()).array().square().sum());
+        // adjacent point frame controled by SKIP_NEIBOUR_DISTANCE(20m)
+        // and end adjacent point frames
         if(delta_travel_distance > SKIP_NEIBOUR_DISTANCE && pos_distance<delta_travel_distance*INFLATION_COVARIANCE){
             double geo_score=0;
             double inten_score =0;
+            // isc_arr should be same order with pos_arr,geomeric check is inside of is_loop_pair() function
             if(is_loop_pair(desc,isc_arr[i],geo_score,inten_score)){
                 if(geo_score+inten_score>best_score){
                     best_score = geo_score+inten_score;
                     best_matched_id = i;
                 }
             }
-
         }
     }
+
+    // loop detected
     if(best_matched_id!=0){
         matched_frame_id.push_back(best_matched_id);
         //ROS_INFO("received loop closure candidate: current: %d, history %d, total_score%f",current_frame_id,best_matched_id,best_score);
     }
-
-
 }
 
 bool ISCGenerationClass::is_loop_pair(ISCDescriptor& desc1, ISCDescriptor& desc2, double& geo_score, double& inten_score){
     int angle =0;
+    // in ISC matching, geometry similarity is calculated first, then intensity similarity
     geo_score = calculate_geometry_dis(desc1,desc2,angle);
-    if(geo_score>GEOMETRY_THRESHOLD){
+    if(geo_score>GEOMETRY_THRESHOLD)
+    {// filter out the pair that does not statisfy the geometry struct
         inten_score = calculate_intensity_dis(desc1,desc2,angle);
+
         if(inten_score>INTENSITY_THRESHOLD){
             return true;
         }
@@ -161,29 +173,36 @@ bool ISCGenerationClass::is_loop_pair(ISCDescriptor& desc1, ISCDescriptor& desc2
 double ISCGenerationClass::calculate_geometry_dis(const ISCDescriptor& desc1, const ISCDescriptor& desc2, int& angle){
     double similarity = 0.0;
 
+    // colomn shifting
     for(int i=0;i<sectors;i++){
         int match_count=0;
+        // p for desc1
         for(int p=0;p<sectors;p++){
+            // new_col for desc2 with colomn shifting
             int new_col = p+i>=sectors?p+i-sectors:p+i;
             for(int q=0;q<rings;q++){
-                if((desc1.at<unsigned char>(q,p)== true && desc2.at<unsigned char>(q,new_col)== true) || (desc1.at<unsigned char>(q,p)== false && desc2.at<unsigned char>(q,new_col)== false)){
+                if((desc1.at<unsigned char>(q,p)== true && desc2.at<unsigned char>(q,new_col)== true) || 
+                (desc1.at<unsigned char>(q,p)== false && desc2.at<unsigned char>(q,new_col)== false))
+                {
                     match_count++;
                 }
-
             }
         }
+        // find the best match result with correct view angle changing, detail in isc-loam paper
         if(match_count>similarity){
             similarity=match_count;
             angle = i;
         }
-
     }
-    return similarity/(sectors*rings);
-    
+    // similarity is divide by the desc1's whole isc signature norm 
+    return similarity/(sectors*rings);  
 }
+
 double ISCGenerationClass::calculate_intensity_dis(const ISCDescriptor& desc1, const ISCDescriptor& desc2, int& angle){
     double difference = 1.0;
+    // angle is obained while geometric similarity calculation function
     double angle_temp = angle;
+    // neighbor colomn to compensate the error of the best colomn result
     for(int i=angle_temp-10;i<angle_temp+10;i++){
 
         int match_count=0;
@@ -195,24 +214,25 @@ double ISCGenerationClass::calculate_intensity_dis(const ISCDescriptor& desc1, c
             if(new_col<0)
                 new_col = new_col+sectors;
             for(int q=0;q<rings;q++){
-                    match_count += abs(desc1.at<unsigned char>(q,p)-desc2.at<unsigned char>(q,new_col));
-                    total_points++;
-            }
-            
+                // intensity difference, due to the binary of isc signature. origin dot product is simplified to mathematcal operation
+                match_count += abs(desc1.at<unsigned char>(q,p)-desc2.at<unsigned char>(q,new_col));
+                total_points++;
+            }         
         }
+
+        // count/total count
         double diff_temp = ((double)match_count)/(sectors*rings*255);
         if(diff_temp<difference)
             difference=diff_temp;
-
     }
-    return 1 - difference;
-    
+    return 1 - difference;  
 }
+
+// what happens if the ground is not a horizontal place? the simple pass filter will disabled?
 void ISCGenerationClass::ground_filter(const pcl::PointCloud<pcl::PointXYZI>::Ptr& pc_in, pcl::PointCloud<pcl::PointXYZI>::Ptr& pc_out){
     pcl::PassThrough<pcl::PointXYZI> pass;
     pass.setInputCloud (pc_in);
     pass.setFilterFieldName ("z");
     pass.setFilterLimits (-0.9, 30.0);
     pass.filter (*pc_out);
-
 }

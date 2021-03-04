@@ -26,6 +26,7 @@
 #include "lidar.h"
 #include "odomEstimationClass.h"
 
+// odometry estimation class also a global variant
 OdomEstimationClass odomEstimation;
 std::mutex mutex_lock;
 std::queue<sensor_msgs::PointCloud2ConstPtr> pointCloudEdgeBuf;
@@ -60,8 +61,10 @@ int total_frame=0;
 Eigen::Isometry3d transform_to_base;
 std::string file_name;
 Eigen::Isometry3d yaw_correction_matrix;
+// core function interface
 void odom_estimation(){
     while(1){
+        // here all queue container should not be empty
         if(!pointCloudEdgeBuf.empty() && !pointCloudSurfBuf.empty()&& !pointCloudBuf.empty()){
 
             //read data
@@ -91,16 +94,19 @@ void odom_estimation(){
             pcl::PointCloud<pcl::PointXYZI>::Ptr pointcloud_surf_in(new pcl::PointCloud<pcl::PointXYZI>());
             pcl::PointCloud<pcl::PointXYZI>::Ptr pointcloud_edge_in(new pcl::PointCloud<pcl::PointXYZI>());
             pcl::PointCloud<pcl::PointXYZI>::Ptr pointcloud_in(new pcl::PointCloud<pcl::PointXYZI>());
+            // obtain message meanwhile point cloud pointers are obtained
             pcl::fromROSMsg(*pointCloudEdgeBuf.front(), *pointcloud_edge_in);
             pcl::fromROSMsg(*pointCloudSurfBuf.front(), *pointcloud_surf_in);
             pcl::fromROSMsg(*pointCloudBuf.front(), *pointcloud_in);
             ros::Time pointcloud_time = (pointCloudBuf.front())->header.stamp;
+            // kickout the current frame from queue
             pointCloudEdgeBuf.pop();
             pointCloudSurfBuf.pop();
             pointCloudBuf.pop();
             mutex_lock.unlock();
 
             if(is_odom_inited == false){
+                // treat the first frame pts as map points
                 odomEstimation.initMapWithPoints(pointcloud_edge_in, pointcloud_surf_in);
                 is_odom_inited = true;
                 ROS_INFO("odom inited");
@@ -119,7 +125,6 @@ void odom_estimation(){
             Eigen::Quaterniond q_current(odomEstimation.odom.rotation());
             Eigen::Vector3d t_current = odomEstimation.odom.translation();
 
-
             static tf::TransformBroadcaster br;
             tf::Transform transform;
             transform.setOrigin( tf::Vector3(t_current.x(), t_current.y(), t_current.z()) );
@@ -127,7 +132,7 @@ void odom_estimation(){
             transform.setRotation(q);
             br.sendTransform(tf::StampedTransform(transform, ros::Time::now(), "map", "odom"));
 
-            // publish odometry
+            // publish odometry transformation
             nav_msgs::Odometry laserOdometry;
             laserOdometry.header.frame_id = "/map"; 
             laserOdometry.child_frame_id = "/odom"; 
@@ -146,7 +151,6 @@ void odom_estimation(){
             localMapMsg.header.stamp = pointcloud_time;
             localMapMsg.header.frame_id = "/map";
             pubLocalMap.publish(localMapMsg);
-
         }
         //sleep 2 ms every time
         std::chrono::milliseconds dura(2);
@@ -178,6 +182,7 @@ int main(int argc, char **argv)
     lidar_param.setMinDistance(min_dis);
 
     odomEstimation.init(lidar_param);
+    // obtain velodyneHandler velodyne laser will publish point cloud frams in regular time period, whole process is done by ROS
     ros::Subscriber subLaserCloud = nh.subscribe<sensor_msgs::PointCloud2>("/velodyne_points_filtered", 100, velodyneHandler);
     ros::Subscriber subEdgeLaserCloud = nh.subscribe<sensor_msgs::PointCloud2>("/laser_cloud_corner", 100, velodyneEdgeHandler);
     ros::Subscriber subSurfLaserCloud = nh.subscribe<sensor_msgs::PointCloud2>("/laser_cloud_surf", 100, velodyneSurfHandler);

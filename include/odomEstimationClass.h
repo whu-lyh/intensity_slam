@@ -35,17 +35,19 @@
 
 class OdomEstimationClass 
 {
-
     public:
     	OdomEstimationClass();
     	
 		void init(lidar::Lidar lidar_param);	
+		// directly apply first frame as local map points
 		void initMapWithPoints(const pcl::PointCloud<pcl::PointXYZI>::Ptr& edge_in, const pcl::PointCloud<pcl::PointXYZI>::Ptr& surf_in);
 		void updatePointsToMap(const pcl::PointCloud<pcl::PointXYZI>::Ptr& edge_in, const pcl::PointCloud<pcl::PointXYZI>::Ptr& surf_in);
 		pcl::PointCloud<pcl::PointXYZI>::Ptr getMap(void);
 		void normalizeIsometry(Eigen::Isometry3d& trans);
+		// transform matrix, indeed is a 4 dimension matrix
 		Eigen::Isometry3d odom;
 
+		// different kind of point cloud pointer
 		pcl::PointCloud<pcl::PointXYZI>::Ptr laserCloudCornerMap;
 		pcl::PointCloud<pcl::PointXYZI>::Ptr laserCloudSurfMap;
 		pcl::PointCloud<pcl::PointXYZI>::Ptr laserCloudDisMap;
@@ -62,6 +64,7 @@ class OdomEstimationClass
 		//kd-tree
 		pcl::KdTreeFLANN<pcl::PointXYZI>::Ptr kdtreeEdgeMap;
 		pcl::KdTreeFLANN<pcl::PointXYZI>::Ptr kdtreeSurfMap;
+		// intensity map like Octomap?
 		pcl::KdTreeFLANN<pcl::PointXYZI>::Ptr kdtreeDisMap;
 
 		//points downsampling before add to map

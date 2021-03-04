@@ -18,12 +18,11 @@
 //points covariance class
 class Double3d{
 public:
-	int id;
-	double angle;
-	double value;
+	int id; // scanid
+	double angle; // angle for each point
+	double value; // curvature
 	Double3d(int id_in, double angle_in, double value_in);
 };
-
 
 //这里所有的数据传递全部采用指针或引用的形式来提高传递效率
 class LaserProcessingClass 
@@ -31,9 +30,15 @@ class LaserProcessingClass
     public:
     	LaserProcessingClass();
 		void init(lidar::Lidar lidar_param_in);
-		void featureExtraction(const pcl::PointCloud<pcl::PointXYZI>::Ptr& pc_in, pcl::PointCloud<pcl::PointXYZI>::Ptr& pc_out_corner, pcl::PointCloud<pcl::PointXYZI>::Ptr& pc_out_surf, pcl::PointCloud<pcl::PointXYZI>::Ptr& pc_out_rest);
-		void featureExtractionFromSector(const pcl::PointCloud<pcl::PointXYZI>::Ptr& pc_in, std::vector<Double3d>& cloudCurvature, pcl::PointCloud<pcl::PointXYZI>::Ptr& pc_out_corner, pcl::PointCloud<pcl::PointXYZI>::Ptr& pc_out_surf, pcl::PointCloud<pcl::PointXYZI>::Ptr& pc_out_rest);	
+		// intensity Calibration before calls feature extraction
 		void intensityCalibration(const pcl::PointCloud<pcl::PointXYZI>::Ptr& pc_in);
+		void featureExtraction(const pcl::PointCloud<pcl::PointXYZI>::Ptr& pc_in, pcl::PointCloud<pcl::PointXYZI>::Ptr& pc_out_corner, 
+							pcl::PointCloud<pcl::PointXYZI>::Ptr& pc_out_surf, pcl::PointCloud<pcl::PointXYZI>::Ptr& pc_out_rest);
+		// indeed curvature selection function
+		void featureExtractionFromSector(const pcl::PointCloud<pcl::PointXYZI>::Ptr& pc_in, std::vector<Double3d>& cloudCurvature, 
+										pcl::PointCloud<pcl::PointXYZI>::Ptr& pc_out_corner, pcl::PointCloud<pcl::PointXYZI>::Ptr& pc_out_surf, 
+										pcl::PointCloud<pcl::PointXYZI>::Ptr& pc_out_rest);	
+		
 	private:
      	lidar::Lidar lidar_param;
 
@@ -41,7 +46,5 @@ class LaserProcessingClass
      	pcl::CropBox<pcl::PointXYZI> farPointFilter;
      	pcl::VoxelGrid<pcl::PointXYZI> downSizeFilter;
 };
-
-
 
 #endif // _LASER_PROCESSING_CLASS_H_

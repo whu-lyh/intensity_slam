@@ -6,6 +6,7 @@
     <!--- Sim Time -->
     <param name="/use_sim_time" value="true" />
     <param name="scan_period" value="0.2" />
+    <!-- laser beam is 64 by default -->
     <param name="scan_line" value="64" />
     <param name="vertical_angle" type="double" value="2.0" />
     <param name="max_dis" type="double" value="90.0" />
