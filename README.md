@@ -60,8 +60,8 @@ And this may take a few minutes to unzip the file
 - normal calculation is still based on the matrix decomposition and trilinear interplation is more simplidfied in code level
 - different residual blocks shared the equal weights
 - transformation should be normalized, more theory support
-- 
-
+- loop closure detection stage is same as the paper demonstrated
+- inside odomEstimation function, a planer feature match module should be digged more
 
 
 ## 5.Acknowledgements
