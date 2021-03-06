@@ -63,6 +63,7 @@ bool ISCOptimizationClass::addPoseToGraph(const pcl::PointCloud<pcl::PointXYZI>:
             //get initial guess
             gtsam::Pose3 transform_pose3 =  pose_optimized_arr[matched_frame_id[i]].between(pose_optimized_arr.back());
 			//ROS_WARN("pose %f,%f,%f, [%f,%f,%f,%f]",transform_pose3.translation().x(),transform_pose3.translation().y(),transform_pose3.translation().z(),transform_pose3.rotation().toQuaternion().w(),transform_pose3.rotation().toQuaternion().x(),transform_pose3.rotation().toQuaternion().y(),transform_pose3.rotation().toQuaternion().z());
+            // frame transformation is obtained in the point-line & point-plane residual calculate stage in CERES
             Eigen::Isometry3d transform = pose3ToEigen(pose_optimized_arr[matched_frame_id[i]].between(pose_optimized_arr.back()));
 			if(geometryConsistencyVerification(pointcloud_edge_arr.size()-1, matched_frame_id[i], transform)){
                 // if geometry consistency is satisfied, fecth the loop transform and conduct a factor graph optimization
@@ -147,11 +148,13 @@ bool ISCOptimizationClass::updateStates(gtsam::Values& result, int matched_id, i
 
 
 }
+
 bool ISCOptimizationClass::geometryConsistencyVerification(int current_id, int matched_id, Eigen::Isometry3d& transform){
-    // transform to obtain local map points (matched pc)
+    // transform to obtain local map points, which contains only semantic feature points(sparsed)
     pcl::PointCloud<pcl::PointXYZI>::Ptr map_surf(new pcl::PointCloud<pcl::PointXYZI>()); 
     pcl::PointCloud<pcl::PointXYZI>::Ptr map_edge(new pcl::PointCloud<pcl::PointXYZI>()); 
     for(int i = -20; i <=20; i=i+5){
+        // two far adjacent frame will be skipped
         if(matched_id+i>= current_id || matched_id+i<0)
             continue;
 
@@ -167,13 +170,14 @@ bool ISCOptimizationClass::geometryConsistencyVerification(int current_id, int m
     Eigen::Isometry3d transform_pose = pose3ToEigen(pose_optimized_arr[matched_id]);
     pcl::transformPointCloud(*map_edge, *map_edge, transform_pose.cast<float>().inverse());
     pcl::transformPointCloud(*map_surf, *map_surf, transform_pose.cast<float>().inverse());
-    //downsample
+    //downsample surf points
     downSizeFilter.setInputCloud(map_surf);
     downSizeFilter.filter(*map_surf);
 
     // current multi scan frame (loop detected pc)
     pcl::PointCloud<pcl::PointXYZI>::Ptr current_scan_surf(new pcl::PointCloud<pcl::PointXYZI>()); 
     pcl::PointCloud<pcl::PointXYZI>::Ptr current_scan_edge(new pcl::PointCloud<pcl::PointXYZI>()); 
+    // this ridiculous for-loop?
     for(int i = 0; i <=0; i=i+3){
         if(current_id+i<0)
             continue;
@@ -225,15 +229,22 @@ Eigen::Isometry3d ISCOptimizationClass::getPose(int frame_num){
     return pose3ToEigen(pose_optimized_arr[frame_num]);
 }
 
+// calculate the transform matrix using edge and surf points using point-line &point-plane residual metric
+// instead of ICP and covariance matrix decomposition
+// build each point-line residual term for each edge pts
+// build each point-plane residual term for each surf pts
+// using ceres to solve a nonlinear optimization problem which is faster than ICP
 double ISCOptimizationClass::estimateOdom(const pcl::PointCloud<pcl::PointXYZI>::Ptr& pc_source_edge, const pcl::PointCloud<pcl::PointXYZI>::Ptr& pc_source_surf, 
                                           const pcl::PointCloud<pcl::PointXYZI>::Ptr& pc_target_edge, const pcl::PointCloud<pcl::PointXYZI>::Ptr& pc_target_surf, 
                                           Eigen::Isometry3d& transform){
     Eigen::Quaterniond init_q(transform.rotation());
     Eigen::Vector3d init_t(0,0,0);
+    // transform matrix as quaternion manner that will be passed to ceres parameter blocks
     double parameters[7] = {init_q.x(), init_q.y(), init_q.z(), init_q.w(),init_t.x(), init_t.y(), init_t.z()};
     Eigen::Map<Eigen::Quaterniond> q_temp = Eigen::Map<Eigen::Quaterniond>(parameters);
     Eigen::Map<Eigen::Vector3d> t_temp = Eigen::Map<Eigen::Vector3d>(parameters + 4);
 
+    // build kdtrees from map pts corner and surf pts
     pcl::KdTreeFLANN<pcl::PointXYZI>::Ptr kdtreeCorner = pcl::KdTreeFLANN<pcl::PointXYZI>::Ptr(new pcl::KdTreeFLANN<pcl::PointXYZI>());
     pcl::KdTreeFLANN<pcl::PointXYZI>::Ptr kdtreeSurf = pcl::KdTreeFLANN<pcl::PointXYZI>::Ptr(new pcl::KdTreeFLANN<pcl::PointXYZI>());
     kdtreeCorner->setInputCloud(pc_source_edge);
@@ -260,6 +271,7 @@ double ISCOptimizationClass::estimateOdom(const pcl::PointCloud<pcl::PointXYZI>:
             std::vector<int> pointSearchInd;
             std::vector<float> pointSearchSqDis;
             
+            // search 5 neighbor pts in map pts
             kdtreeCorner->nearestKSearch(tranformed_edge->points[i], 5, pointSearchInd, pointSearchSqDis);
             if (pointSearchSqDis[4] < 2.0)
             {
@@ -278,14 +290,18 @@ double ISCOptimizationClass::estimateOdom(const pcl::PointCloud<pcl::PointXYZI>:
                 Eigen::Matrix3d covMat = Eigen::Matrix3d::Zero();
                 for (int j = 0; j < 5; j++)
                 {
+                    // decentralized neighbor pts
                     Eigen::Matrix<double, 3, 1> tmpZeroMean = nearCorners[j] - center;
+                    // calculate covariance matrix
                     covMat = covMat + tmpZeroMean * tmpZeroMean.transpose();
                 }
                 
+                // get the line direction(normal direction)
                 Eigen::SelfAdjointEigenSolver<Eigen::Matrix3d> saes(covMat);
 
                 Eigen::Vector3d unit_direction = saes.eigenvectors().col(2);
                 Eigen::Vector3d curr_point(pc_target_edge->points[i].x, pc_target_edge->points[i].y, pc_target_edge->points[i].z);
+
                 if (saes.eigenvalues()[2] > 3 * saes.eigenvalues()[1])
                 { 
                     Eigen::Vector3d point_on_line = center;
@@ -293,13 +309,14 @@ double ISCOptimizationClass::estimateOdom(const pcl::PointCloud<pcl::PointXYZI>:
                     point_a = 0.1 * unit_direction + point_on_line;
                     point_b = -0.1 * unit_direction + point_on_line;
 
-                    // edge point is set in virtual?
+                    // edge point is set in virtual and build a point to line residual metric
                     ceres::CostFunction *cost_function = new EdgeAnalyticCostFunction(curr_point, point_a, point_b,1);  
                     problem.AddResidualBlock(cost_function, loss_function, parameters);
                     corner_num++;   
                 }                           
             }
         }
+
         if(corner_num<20){
             ROS_INFO("not enough corresponding points");
             return 300;
@@ -373,5 +390,4 @@ double ISCOptimizationClass::estimateOdom(const pcl::PointCloud<pcl::PointXYZI>:
     transform.rotate(q_temp);
     transform.pretranslate(t_temp);
     return total_cost;
-
 }

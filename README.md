@@ -55,14 +55,16 @@ And this may take a few minutes to unzip the file
 - the whole slam system is deeply related to the hardware which makes the point cloud preprocess more fancy.
 - the intensity calibration module is just indicent angle normalization shown in code but more fancy in paper. Maybe here the calibration is related to the VELODYNE LASER scanner.
 - the featureExtraction module is slightly different from the origin LOAM, maybe more closed to A-LOAM. without feature distribution check but more straightforward and easy to understand, more friendly to fresher.
-- iscloam is more close to the loam
+- iscloam is more close to the loam，especially in feature extraction module
 - update frame to map points the downsampling is done. The down sampling points are used in residual calculation,using ceres to finish a local PGO.
 - normal calculation is still based on the matrix decomposition and trilinear interplation is more simplidfied in code level
 - different residual blocks shared the equal weights
 - transformation should be normalized, more theory support
 - loop closure detection stage is same as the paper demonstrated
-- inside odomEstimation function, a planer feature match module should be digged more
-
+- inside odomEstimation function, a point-planer residual manner which can be studied in the future.
+- code released till 20210306 don't contains the temporal consistency module considering the key frame is used in practice, which makes temporal consistency check for continuous frame is trial but is more time-consuming.
+- the Isometry3d transformation matrix is calculated at the point-plane & point-line matching class instread of ICP, considering the speed of the matrix decomposition.
+- loop closure pair will pass into a geometryConsistencyVerification module for geometric consistency check, which is used often in feature-based pc match algorithm. Indeed its the extra check after feature matching.
 
 ## 5.Acknowledgements
 Thanks for [A-LOAM](https://github.com/HKUST-Aerial-Robotics/A-LOAM) and LOAM(J. Zhang and S. Singh. LOAM: Lidar Odometry and Mapping in Real-time) and [LOAM_NOTED](https://github.com/cuitaixiang/LOAM_NOTED).

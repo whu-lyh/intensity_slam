@@ -93,10 +93,14 @@ class ISCOptimizationClass
 
         void globalOptimization(void);
 
+        // after intensity shape context matching, using the edge and surf pts to calculate point-line & point-plane residual to verify the geometric-only match
+        // STEPS:1. search local map points and target key frame points
+        // 2. build residual between point-line & point-plane and call ceres to solve the final Isometry matrix
         bool geometryConsistencyVerification(int current_id, int matched_id, Eigen::Isometry3d& transform);
 
         bool updateStates(gtsam::Values& result, int matched_id, int current_id);
      
+        // call by geometryConsistencyVerification() and return a score returned from ceres solver
         double estimateOdom(const pcl::PointCloud<pcl::PointXYZI>::Ptr& pc_source_edge, const pcl::PointCloud<pcl::PointXYZI>::Ptr& pc_source_surf, const pcl::PointCloud<pcl::PointXYZI>::Ptr& pc_target_edge, const pcl::PointCloud<pcl::PointXYZI>::Ptr& pc_target_surf, Eigen::Isometry3d& transform);
 
 };
